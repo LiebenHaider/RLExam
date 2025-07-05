@@ -51,7 +51,7 @@ def train_loop(models,
             for name, model in models.items():
                 # Choose augmentation based on method
                 if name == 'rl':
-                    aug_policy = agent.select_action(...)  # Define state & interface later
+                    aug_policy = agent.select_action(...)  # TODO: Define state & interface later
                     augmented_data = apply_augmentations(data, aug_policy)
                 elif name == 'random':
                     augmented_data = apply_random_augmentations(data)
@@ -75,7 +75,7 @@ def train_loop(models,
 
         # Optionally: RL agent update every few epochs
         if agent and epoch % 5 == 0:
-            agent.update(...)  # Use your stored rewards/trajectories
+            agent.update(...)  # stored rewards/trajectories
 
         # Early stopping check
         if all(p >= early_stopping for p in patience.values()):
