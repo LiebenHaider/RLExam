@@ -1,3 +1,5 @@
+import torchvision
+
 def apply_augmentations():
     pass
 

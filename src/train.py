@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from copy import deepcopy
 from collections import defaultdict
+from sklearn.metrics import f1_score, precision_score, recall_score
 from augment import apply_augmentations, apply_random_augmentations
 
 def train_step(model, optimizer, data, labels, device):
@@ -39,7 +40,7 @@ def train_loop(models,
     models: dict with keys 'rl', 'random', 'none'
     agent: RL agent
     """
-    optimizers = {k: torch.optim.Adam(v.parameters(), lr=1e-3) for k, v in models.items()}
+    optimizers = {k: torch.optim.Adam(v.parameters(), lr=1e-3, weight_decay=1e-3) for k, v in models.items()}
     histories = {k: defaultdict(list) for k in models.keys()}
     best_scores = {k: 0.0 for k in models.keys()}
     patience = {k: 0 for k in models.keys()}
@@ -83,3 +84,39 @@ def train_loop(models,
             break
 
     return histories, best_scores
+
+def final_test(models, testloader, device='cuda'):
+    best_final_scores = {}
+
+    for name, model in models.items():
+        model.eval()
+        correct, total = 0, 0
+        all_preds, all_labels = [], []
+
+        with torch.no_grad():
+            for data, labels in testloader:
+                data, labels = data.to(device), labels.to(device)
+                outputs = model(data)
+                preds = outputs.argmax(dim=1)
+                all_preds.append(preds.cpu())
+                all_labels.append(labels.cpu())
+                correct += (preds == labels).sum().item()
+                total += labels.size(0)
+
+        all_preds = torch.cat(all_preds).numpy()
+        all_labels = torch.cat(all_labels).numpy()
+
+        accuracy = correct / total
+        f1 = f1_score(all_labels, all_preds, average='macro')
+        precision = precision_score(all_labels, all_preds, average='macro')
+        recall = recall_score(all_labels, all_preds, average='macro')
+
+        performance_dict = {
+            'accuracy': accuracy,
+            'precision': precision,
+            'recall': recall,
+            'f1': f1
+        }
+        best_final_scores[name] = performance_dict
+
+    return best_final_scores
