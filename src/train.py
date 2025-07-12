@@ -52,7 +52,7 @@ def train_loop(models,
             for name, model in models.items():
                 # Choose augmentation based on method
                 if name == 'rl':
-                    aug_policy = agent.select_action(...)  # TODO: Define state & interface later
+                    aug_policy = agent.actor_critic.get_action(state)  # TODO: Define state & interface later
                     augmented_data = apply_augmentations(data, aug_policy)
                 elif name == 'random':
                     augmented_data = apply_random_augmentations(data)

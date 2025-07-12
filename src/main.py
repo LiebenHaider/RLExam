@@ -5,6 +5,7 @@ from torchvision.datasets import CIFAR10
 
 from dataloader import get_dataloaders
 from resnet import ResNet18
+from agent import PPOAgent
 from train import train_loop, final_test
 
 SEED = 42
@@ -33,22 +34,8 @@ def main():
     except: print("Shape mismatch!"
             "Input layer must match B x C x H x W.")
     
-    # Create models to evaluate
-    rl_resnet = ResNet18()      # model trained with rl
-    rand_resnet = ResNet18()    # model trained without rl
-    no_resnet = ResNet18()      # model trained without augmentation
-    
-    model_dict = {
-        'rl': rl_resnet,
-        'random': rand_resnet,
-        'none': no_resnet
-    }
-    
-    # # Create agent
-    # agent = ...
-    
-    # # train models
-    # NUM_EPOCHS = 1
+    # train models
+    NUM_EPOCHS = 1
     
     if torch.cuda.is_available():
         device = 'cuda'
@@ -57,15 +44,29 @@ def main():
     else: device = 'cpu'
     print(f"Running jobs on {device}.")
     
-    # ### TRAINING LOOP ###
-    # final_metrics = train_loop(
-    #     model_dict, 
-    #     dataloader_train=trainloader, 
-    #     dataloader_val=valloader, 
-    #     device=device, 
-    #     agent=agent,
-    #     epochs=NUM_EPOCHS
-    # )
+        # Create models to evaluate
+    rl_resnet = ResNet18()      # model trained with rl
+    rand_resnet = ResNet18()    # model trained without rl
+    no_resnet = ResNet18()      # model trained without augmentation
+    
+    # # Create agent
+    agent = PPOAgent().to(device)
+    
+    model_dict = {
+        'rl': rl_resnet.to(device),
+        'random': rand_resnet.to(device),
+        'none': no_resnet.to(device)
+    }
+    
+    ### TRAINING LOOP ###
+    final_metrics = train_loop(
+        model_dict, 
+        dataloader_train=trainloader, 
+        dataloader_val=valloader, 
+        device=device, 
+        agent=agent,
+        epochs=NUM_EPOCHS
+    )
     
     # Test final performance
     final_test_metrics = final_test(
