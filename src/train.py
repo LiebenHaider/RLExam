@@ -4,7 +4,7 @@ from copy import deepcopy
 from collections import defaultdict
 from sklearn.metrics import f1_score, precision_score, recall_score
 from augment import apply_auto_augmentations, apply_random_augmentations
-from agent import AutoAugmentPolicy
+from agent import AutoAugmentPolicy, collect_state_information
 from augment import AugmentationSpace
 
 def train_step(model, optimizer, data, labels, device):
@@ -47,8 +47,16 @@ def train_loop(models,
     best_scores = {k: 0.0 for k in models.keys()}
     patience = {k: 0 for k in models.keys()}
     
-    policy = AutoAugmentPolicy()
-    aug_space = AugmentationSpace()
+    policy = AutoAugmentPolicy() # Policy decoder
+    aug_space = AugmentationSpace() # Augmentation space
+    
+    # State info
+    train_acc = 0
+    val_acc = 0
+    train_loss = 0
+    val_loss = 0
+    recent_train_accs = []
+    recent_val_accs = []
 
     for epoch in range(epochs):
         for batch in dataloader_train:
@@ -57,6 +65,17 @@ def train_loop(models,
             for name, model in models.items():
                 # Choose augmentation based on method
                 if name == 'rl':
+                    state = collect_state_information(
+                        epoch=epochs,
+                        total_epochs=epoch,
+                        train_acc=train_acc,
+                        val_acc=val_acc,
+                        train_loss=train_loss,
+                        val_loss=val_loss,
+                        recent_train_accs=recent_train_accs,
+                        recent_val_accs=recent_val_accs,
+                        device=device
+                    )
                     actions = agent.actor_critic.get_action(state) # Get actions given current state
                     aug_policy = policy.decode_actions(actions) # COnvert raw action to applicable policy
                     augmented_data = apply_auto_augmentations(data, aug_policy, aug_space)

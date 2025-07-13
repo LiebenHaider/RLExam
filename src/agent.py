@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import numpy as np
 from torch.distributions import Categorical
 from augment import AugmentationSpace
 
@@ -119,3 +120,19 @@ class AutoAugmentPolicy:
             policy.append(sub_policy)
         
         return policy
+    
+def collect_state_information(epoch, total_epochs, train_acc, val_acc, train_loss, val_loss, lr, recent_train_accs, recent_val_accs, device='cuda'):
+    state_info_tensor = torch.tensor([
+        epoch / total_epochs,
+        train_acc,
+        val_acc, 
+        train_loss,
+        val_loss,
+        lr,
+        train_acc - val_acc,
+        np.mean(recent_train_accs[-5:]) - train_acc,  # Recent trend
+        np.mean(recent_val_accs[-5:]) - val_acc,
+        min(1.0, train_loss / 2.0) #. Normalized loss
+    ], device=device)
+    
+    return state_info_tensor

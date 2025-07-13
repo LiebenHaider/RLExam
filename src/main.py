@@ -36,6 +36,9 @@ def main():
     
     # train models
     NUM_EPOCHS = 1
+    STATE_DIM = 10
+    ACTION_DIM = 12
+    HIDDEN_DIM = 128
     
     if torch.cuda.is_available():
         device = 'cuda'
@@ -44,13 +47,17 @@ def main():
     else: device = 'cpu'
     print(f"Running jobs on {device}.")
     
-        # Create models to evaluate
+    # Create models to run in parallel and evaluate
     rl_resnet = ResNet18()      # model trained with rl
     rand_resnet = ResNet18()    # model trained without rl
     no_resnet = ResNet18()      # model trained without augmentation
     
     # # Create agent
-    agent = PPOAgent().to(device)
+    agent = PPOAgent(
+        state_dim=STATE_DIM, 
+        action_dim=ACTION_DIM, 
+        hidden_dim=HIDDEN_DIM
+    ).to(device)
     
     model_dict = {
         'rl': rl_resnet.to(device),
@@ -75,14 +82,15 @@ def main():
         device=device
     )
     print(final_test_metrics)
+    
     # Create folder and save data
-    # final_metrics_df = pd.DataFrame(final_metrics)
-    # final_test_metrics_df = pd.DataFrame(final_test_metrics)
-    # os.makedirs(METRICS_PATH, exist_ok=True)
-    # metrics_path = os.path.join(METRICS_PATH, METRICS_FILENAME)
-    # testmetrics_path = os.path.join(METRICS_PATH, TESTMETRICS_FILENAME)
-    # final_metrics_df.to_csv(metrics_path)
-    # final_test_metrics_df.to_csv(testmetrics_path)
+    final_metrics_df = pd.DataFrame(final_metrics)
+    final_test_metrics_df = pd.DataFrame(final_test_metrics)
+    os.makedirs(METRICS_PATH, exist_ok=True)
+    metrics_path = os.path.join(METRICS_PATH, METRICS_FILENAME)
+    testmetrics_path = os.path.join(METRICS_PATH, TESTMETRICS_FILENAME)
+    final_metrics_df.to_csv(metrics_path)
+    final_test_metrics_df.to_csv(testmetrics_path)
     
 if __name__ == "__main__":
     main()

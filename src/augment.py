@@ -32,16 +32,22 @@ class AugmentationSpace:
 
 def apply_auto_augmentations(data, aug_policy, space: AugmentationSpace):
     augm_imgs = []
+
     for img in range(data.shape[0]):
-        selected_sub_policy = np.random.choice(len(aug_policy), 2)
-        selected_aug = aug_policy[selected_sub_policy]
+        selected_sub_policy_idx = np.random.choice(len(aug_policy))
+        selected_aug = aug_policy[selected_sub_policy_idx]
         
+        augmnt_img = data[img].clone().detach()
         for op in selected_aug:
-            random_prob = np.random.uniform(0.0, 1.0)
+            op_prob = op['probability']
             
-            if np.random.random() < random_prob:
-                aug_img = space.apply_operation(data[img], op[0], op[1])
-            augm_imgs.append(aug_img.unsqueeze(0))
+            if np.random.random() < op_prob:
+                augmnt_img = space.apply_operation(
+                    augmnt_img, 
+                    op['operation'], 
+                    op['magnitude']
+                ).clone()
+        augm_imgs.append(augmnt_img.unsqueeze(0))
             
     return torch.vstack(augm_imgs)
 
@@ -51,7 +57,7 @@ def apply_random_augmentations(data, space: AugmentationSpace, num_ops_per_polic
     
     for i in range(data.shape[0]):
         img = data[i]
-        augmented_img = img
+        augmented_img = img.clone().detach()
         
         # Apply num_ops_per_policy random operations (same as policy)
         for _ in range(num_ops_per_policy):
