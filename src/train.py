@@ -3,7 +3,9 @@ import torch.nn as nn
 from copy import deepcopy
 from collections import defaultdict
 from sklearn.metrics import f1_score, precision_score, recall_score
-from augment import apply_augmentations, apply_random_augmentations
+from augment import apply_auto_augmentations, apply_random_augmentations
+from agent import AutoAugmentPolicy
+from augment import AugmentationSpace
 
 def train_step(model, optimizer, data, labels, device):
     model.train()
@@ -44,6 +46,9 @@ def train_loop(models,
     histories = {k: defaultdict(list) for k in models.keys()}
     best_scores = {k: 0.0 for k in models.keys()}
     patience = {k: 0 for k in models.keys()}
+    
+    policy = AutoAugmentPolicy()
+    aug_space = AugmentationSpace()
 
     for epoch in range(epochs):
         for batch in dataloader_train:
@@ -52,10 +57,11 @@ def train_loop(models,
             for name, model in models.items():
                 # Choose augmentation based on method
                 if name == 'rl':
-                    aug_policy = agent.actor_critic.get_action(state)  # TODO: Define state & interface later
-                    augmented_data = apply_augmentations(data, aug_policy)
+                    actions = agent.actor_critic.get_action(state) # Get actions given current state
+                    aug_policy = policy.decode_actions(actions) # COnvert raw action to applicable policy
+                    augmented_data = apply_auto_augmentations(data, aug_policy, aug_space)
                 elif name == 'random':
-                    augmented_data = apply_random_augmentations(data)
+                    augmented_data = apply_random_augmentations(data, aug_space)
                 else:  # 'none'
                     augmented_data = data
 
