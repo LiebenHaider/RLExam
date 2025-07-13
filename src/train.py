@@ -1,10 +1,9 @@
 import torch
 import torch.nn as nn
-from copy import deepcopy
 from collections import defaultdict
 from sklearn.metrics import f1_score, precision_score, recall_score
 from augment import apply_auto_augmentations, apply_random_augmentations
-from agent import AutoAugmentPolicy, collect_state_information
+from agent import AutoAugmentPolicy, collect_state_information, advantage_computation
 from augment import AugmentationSpace
 
 def train_step(model, optimizer, data, labels, device):
@@ -31,18 +30,21 @@ def evaluate(model, dataloader, device):
             total += labels.size(0)
     return correct / total
 
-def train_loop(models, 
+def train_loop(
+    models, 
     dataloader_train, 
     dataloader_val, 
     agent, 
     epochs=10, 
     device='cuda', 
-    early_stopping=5):
+    early_stopping=5,
+    lr=1e-3
+    ):
     """
     models: dict with keys 'rl', 'random', 'none'
     agent: RL agent
     """
-    optimizers = {k: torch.optim.Adam(v.parameters(), lr=1e-3, weight_decay=1e-3) for k, v in models.items()}
+    optimizers = {k: torch.optim.Adam(v.parameters(), lr=lr, weight_decay=1e-3) for k, v in models.items()}
     histories = {k: defaultdict(list) for k in models.keys()}
     best_scores = {k: 0.0 for k in models.keys()}
     patience = {k: 0 for k in models.keys()}
@@ -50,34 +52,51 @@ def train_loop(models,
     policy = AutoAugmentPolicy() # Policy decoder
     aug_space = AugmentationSpace() # Augmentation space
     
-    # State info
-    train_acc = 0
-    val_acc = 0
-    train_loss = 0
-    val_loss = 0
-    recent_train_accs = []
+    # State info initialized /w random guesses
+    val_acc = 0.1
+    train_loss = 2
+    val_loss = 2
+    recent_train_loss = []
     recent_val_accs = []
+    lr = lr
+    
+    # Agent update paramers
+    state_trajectory = []           # State when policy was sampled
+    actions_trajectory = []          # Actions chosen by policy  
+    old_log_probs = []    # Log probability of chosen actions
+    rewards = []          # Reward received after applying policy
+    values_list = []
+    
+    # Augmentation policy
+    aug_policy = None
+    
+    # Precompute policy on initial guesses
+    state = collect_state_information(
+        epoch=epoch,
+        lr=lr,
+        total_epochs=epochs,
+        val_acc=val_acc,
+        train_loss=train_loss,
+        val_loss=val_loss,
+        recent_train_loss=recent_train_loss,
+        recent_val_accs=recent_val_accs,
+        device=device
+    )
+    state_trajectory.append(state)
+    action, log_prob, value = agent.actor_critic.get_action(state) # Get actions given current state
+    actions_trajectory.append(action)
+    old_log_probs.append(log_prob)
+    values_list.append(value)
+    aug_policy = policy.decode_actions(action) # Convert raw action to applicable policy
 
     for epoch in range(epochs):
+        
         for batch in dataloader_train:
             data, labels = batch
 
             for name, model in models.items():
                 # Choose augmentation based on method
                 if name == 'rl':
-                    state = collect_state_information(
-                        epoch=epochs,
-                        total_epochs=epoch,
-                        train_acc=train_acc,
-                        val_acc=val_acc,
-                        train_loss=train_loss,
-                        val_loss=val_loss,
-                        recent_train_accs=recent_train_accs,
-                        recent_val_accs=recent_val_accs,
-                        device=device
-                    )
-                    actions = agent.actor_critic.get_action(state) # Get actions given current state
-                    aug_policy = policy.decode_actions(actions) # COnvert raw action to applicable policy
                     augmented_data = apply_auto_augmentations(data, aug_policy, aug_space)
                 elif name == 'random':
                     augmented_data = apply_random_augmentations(data, aug_space)
@@ -85,11 +104,15 @@ def train_loop(models,
                     augmented_data = data
 
                 loss = train_step(model, optimizers[name], augmented_data, labels, device)
+                recent_train_loss.append(loss)
                 histories[name]['loss'].append(loss)
 
         # Validation
         for name, model in models.items():
             acc = evaluate(model, dataloader_val, device)
+            if name == "rl": # Collect only rl agent's accuracy
+                recent_val_accs.append(acc)
+                rewards.append(acc)
             histories[name]['val_acc'].append(acc)
 
             # Early stopping
@@ -99,16 +122,49 @@ def train_loop(models,
             else:
                 patience[name] += 1
 
-        # Optionally: RL agent update every few epochs
+        # Train agent every soa dn so epochs
         if agent and epoch % 5 == 0:
-            agent.update(...)  # stored rewards/trajectories
+            # Train for entire epoch with the same policy
+            state = collect_state_information(
+                epoch=epoch,
+                lr=lr,
+                total_epochs=epochs,
+                val_acc=val_acc,
+                train_loss=train_loss,
+                val_loss=val_loss,
+                recent_train_loss=recent_train_loss,
+                recent_val_accs=recent_val_accs,
+                device=device
+            )
+            state_trajectory.append(state)
+            action, log_prob, value = agent.actor_critic.get_action(state) # Get actions given current state
+            actions_trajectory.append(action)
+            old_log_probs.append(log_prob)
+            values_list.append(value)
+            aug_policy = policy.decode_actions(action) # Convert raw action to applicable policy
+            advantages = advantage_computation(rewards=rewards, values=values_list)
+            agent.update(
+                states=state_trajectory,
+                actions=actions_trajectory,
+                old_log_probs=old_log_probs,
+                rewards=rewards,
+                advantages=advantages
+            )  # Buffered items
+            
+            # Clear buffer
+            state_trajectory.clear()
+            actions_trajectory.clear()
+            old_log_probs.clear()
+            rewards.clear()
+            values_list.clear()
+            
 
         # Early stopping check
         if all(p >= early_stopping for p in patience.values()):
             print(f"Early stopping at epoch {epoch}")
             break
 
-    return histories, best_scores
+    return histories, best_scores, rewards
 
 def final_test(models, testloader, device='cuda'):
     best_final_scores = {}

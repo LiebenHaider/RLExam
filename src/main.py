@@ -66,7 +66,7 @@ def main():
     }
     
     ### TRAINING LOOP ###
-    final_metrics = train_loop(
+    histories, best_scores, rewards = train_loop(
         model_dict, 
         dataloader_train=trainloader, 
         dataloader_val=valloader, 
@@ -81,9 +81,13 @@ def main():
         testloader=testloader,
         device=device
     )
-    print(final_test_metrics)
     
     # Create folder and save data
+    final_metrics = {
+        'training_histories': histories,
+        'best_scores': best_scores,
+        'reward_trajectory': rewards
+    }
     final_metrics_df = pd.DataFrame(final_metrics)
     final_test_metrics_df = pd.DataFrame(final_test_metrics)
     os.makedirs(METRICS_PATH, exist_ok=True)

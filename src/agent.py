@@ -110,7 +110,7 @@ class AutoAugmentPolicy:
                 # mag_idx = 23 % 5 = 3
                 # prob = 7 / 10.0 = 0.7
                 # Sub-policy 1
-                # {'operation': 7, 'magnitude': 3, 'probability': 0.7},  # Cutout at 70%
+                # {'operation': 4, 'magnitude': 3, 'probability': 0.7},  # Cutout at 70%
                 
                 sub_policy.append({
                     'operation': op_idx.item(),
@@ -121,18 +121,43 @@ class AutoAugmentPolicy:
         
         return policy
     
-def collect_state_information(epoch, total_epochs, train_acc, val_acc, train_loss, val_loss, lr, recent_train_accs, recent_val_accs, device='cuda'):
+def collect_state_information(epoch, total_epochs, val_acc, train_loss, val_loss, lr, recent_train_loss, recent_val_accs, device='cuda'):
     state_info_tensor = torch.tensor([
         epoch / total_epochs,
-        train_acc,
         val_acc, 
         train_loss,
         val_loss,
+        train_loss - val_loss,
         lr,
-        train_acc - val_acc,
-        np.mean(recent_train_accs[-5:]) - train_acc,  # Recent trend
+        np.mean(recent_train_loss[-5:]) - train_loss,  # Recent trend
         np.mean(recent_val_accs[-5:]) - val_acc,
         min(1.0, train_loss / 2.0) #. Normalized loss
     ], device=device)
     
     return state_info_tensor
+
+def advantage_computation(rewards, values, gamma=0.99):
+    """
+    From our exercise implementation (simplified)
+    """
+    rewards = torch.tensor(rewards, dtype=torch.float32)
+    values = torch.tensor(values, dtype=torch.float32)
+    
+    # Compute discounted returns
+    returns = []
+    discounted_sum = 0
+    
+    # Work backwards
+    for reward in reversed(rewards):
+        discounted_sum = reward + gamma * discounted_sum
+        returns.insert(0, discounted_sum)
+    
+    returns = torch.tensor(returns)
+    
+    # Advantage = return - baseline (value estimate)
+    advantages = returns - values
+    
+    # Normalize advantages
+    advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+    
+    return advantages, returns
