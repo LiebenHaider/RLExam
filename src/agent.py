@@ -12,23 +12,23 @@ GitHub: https://github.com/DeepVoltaire/AutoAugment
 class Actor_Critic(nn.Module):
     def __init__(self, state_dim, action_dim, hidden_dim):
         super().__init__()
-        
+        self.action_dim = action_dim
         # Actor implementation
         self.actor = nn.Sequential(
-            nn.Linear(state_dim, hidden_dim),
+            nn.Linear(state_dim, hidden_dim, dtype=torch.float32),
             nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(hidden_dim, hidden_dim, dtype=torch.float32),
             nn.ReLU(),
-            nn.Linear(hidden_dim, action_dim)
+            nn.Linear(hidden_dim, action_dim, dtype=torch.float32)
         )
         
         # Critic implementation
         self.critic = nn.Sequential(
-            nn.Linear(state_dim, hidden_dim),
+            nn.Linear(state_dim, hidden_dim, dtype=torch.float32),
             nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(hidden_dim, hidden_dim, dtype=torch.float32),
             nn.ReLU(),
-            nn.Linear(hidden_dim, 1)
+            nn.Linear(hidden_dim, 1, dtype=torch.float32)
         )
     
     def forward(self, state):
@@ -37,18 +37,48 @@ class Actor_Critic(nn.Module):
         return action_logits, value
     
     def get_action(self, state):
+        if len(state.shape) >= 1: # Add batch dimension if single state
+            state = state.unsqueeze(0)
         action_logits, value = self.forward(state)
-        action_probs = torch.softmax(action_logits, dim=-1)
-        dist = Categorical(action_probs)
-        action = dist.sample()
-        log_prob = dist.log_prob(action)
-        return action, log_prob, value
+        # Problem is action sampling, we need complete action space
+        # but also logits for update
+        # Solution -> discrete distribution
+        actions = []
+        log_probs = []
+        
+        action_logits = action_logits.reshape([state.shape[0] * self.action_dim, 1])
 
-class PPOAgent:
+        for i in range(self.action_dim):
+            dist = Categorical(logits=action_logits[i:i+1])
+            action = dist.sample()
+            log_prob = dist.log_prob(action)
+            actions.append(action)
+            log_probs.append(log_prob)
+            
+        return (
+            torch.stack(actions), 
+            torch.stack(log_probs), 
+            value
+        )
+    
+    def compute_log_probs(self, action_logits, actions):
+        """Compute log probabilities for given actions"""
+
+        log_probs = []
+        action_logits = action_logits.squeeze(1)
+        for i in range(self.action_dim):
+            dist = Categorical(logits=action_logits[:, i:i+1])
+            log_prob = dist.log_prob(actions[:, i])
+            log_probs.append(log_prob)
+        
+        return torch.stack(log_probs, dim=1)
+
+class PPOAgent(nn.Module):
     """
     Standard implementation of PPO tailored to DAC.
     """
     def __init__(self, state_dim, action_dim, hidden_dim, lr=3e-4, clip_epsilon=0.2, epochs=4):
+        super().__init__()
         self.actor_critic = Actor_Critic(state_dim, action_dim, hidden_dim)
         self.optimizer = torch.optim.Adam(self.actor_critic.parameters(), lr=lr)
         self.clip_epsilon = clip_epsilon
@@ -59,9 +89,7 @@ class PPOAgent:
         for _ in range(self.epochs):
             # Get current policy predictions
             action_logits, values = self.actor_critic(states)
-            action_probs = torch.softmax(action_logits, dim=-1)
-            dist = Categorical(action_probs)
-            new_log_probs = dist.log_prob(actions)
+            new_log_probs = self.actor_critic.compute_log_probs(action_logits, actions)
             
             # Calculate ratio for PPO clipping
             ratio = torch.exp(new_log_probs - old_log_probs)
@@ -72,7 +100,8 @@ class PPOAgent:
             actor_loss = -torch.min(surr1, surr2).mean()
             
             # Critic loss
-            critic_loss = nn.MSELoss()(values.squeeze(), rewards)
+            values = values[-1] # Use only final value
+            critic_loss = nn.MSELoss()(values, rewards)
             
             # Total loss
             total_loss = actor_loss + 0.5 * critic_loss
@@ -122,6 +151,13 @@ class AutoAugmentPolicy:
         return policy
     
 def collect_state_information(epoch, total_epochs, val_acc, train_loss, val_loss, lr, recent_train_loss, recent_val_accs, device='cuda'):
+    if len(recent_train_loss) >= 5:
+        train_trend = np.mean(recent_train_loss[-5:]) - train_loss
+        val_trend = np.mean(recent_val_accs[-5:]) - val_acc
+    else:
+        train_trend = 0
+        val_trend = 0
+        
     state_info_tensor = torch.tensor([
         epoch / total_epochs,
         val_acc, 
@@ -129,19 +165,20 @@ def collect_state_information(epoch, total_epochs, val_acc, train_loss, val_loss
         val_loss,
         train_loss - val_loss,
         lr,
-        np.mean(recent_train_loss[-5:]) - train_loss,  # Recent trend
-        np.mean(recent_val_accs[-5:]) - val_acc,
+        train_trend,  # Recent trend
+        val_trend,
         min(1.0, train_loss / 2.0) #. Normalized loss
-    ], device=device)
+    ], device=device, dtype=torch.float32)
     
     return state_info_tensor
 
-def advantage_computation(rewards, values, gamma=0.99):
+def advantage_computation(rewards, values, device, gamma=0.99):
     """
     From our exercise implementation (simplified)
     """
-    rewards = torch.tensor(rewards, dtype=torch.float32)
-    values = torch.tensor(values, dtype=torch.float32)
+    rewards = rewards[-len(values):] # Fix shape mismatch in ppo update
+    rewards = torch.tensor(rewards, dtype=torch.float32, device=device)
+    values = torch.tensor(values, dtype=torch.float32, device=device)
     
     # Compute discounted returns
     returns = []
@@ -152,12 +189,15 @@ def advantage_computation(rewards, values, gamma=0.99):
         discounted_sum = reward + gamma * discounted_sum
         returns.insert(0, discounted_sum)
     
-    returns = torch.tensor(returns)
+    returns = torch.tensor(returns, dtype=torch.float32, device=device)
     
     # Advantage = return - baseline (value estimate)
     advantages = returns - values
     
     # Normalize advantages
-    advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+    if len(advantages) > 1:
+        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+    else:
+        advantages = advantages - advantages.mean()
     
-    return advantages, returns
+    return advantages, returns, rewards

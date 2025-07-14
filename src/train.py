@@ -72,7 +72,7 @@ def train_loop(
     
     # Precompute policy on initial guesses
     state = collect_state_information(
-        epoch=epoch,
+        epoch=0,
         lr=lr,
         total_epochs=epochs,
         val_acc=val_acc,
@@ -85,7 +85,7 @@ def train_loop(
     state_trajectory.append(state)
     action, log_prob, value = agent.actor_critic.get_action(state) # Get actions given current state
     actions_trajectory.append(action)
-    old_log_probs.append(log_prob)
+    old_log_probs.append(log_prob.detach())
     values_list.append(value)
     aug_policy = policy.decode_actions(action) # Convert raw action to applicable policy
 
@@ -104,15 +104,18 @@ def train_loop(
                     augmented_data = data
 
                 loss = train_step(model, optimizers[name], augmented_data, labels, device)
-                recent_train_loss.append(loss)
+                if name == 'rl':
+                    recent_train_loss.append(loss)
                 histories[name]['loss'].append(loss)
+            # break # for debugging
 
         # Validation
         for name, model in models.items():
             acc = evaluate(model, dataloader_val, device)
             if name == "rl": # Collect only rl agent's accuracy
                 recent_val_accs.append(acc)
-                rewards.append(acc)
+                if (epoch + 1) % 3 == 0: # Get FINAL reward
+                    rewards.append(acc)
             histories[name]['val_acc'].append(acc)
 
             # Early stopping
@@ -123,7 +126,7 @@ def train_loop(
                 patience[name] += 1
 
         # Train agent every soa dn so epochs
-        if agent and epoch % 5 == 0:
+        if agent and (epoch + 1) % 3 == 0:
             # Train for entire epoch with the same policy
             state = collect_state_information(
                 epoch=epoch,
@@ -139,15 +142,20 @@ def train_loop(
             state_trajectory.append(state)
             action, log_prob, value = agent.actor_critic.get_action(state) # Get actions given current state
             actions_trajectory.append(action)
-            old_log_probs.append(log_prob)
+            old_log_probs.append(log_prob.detach()) # Remove from CG or else silent bug
             values_list.append(value)
             aug_policy = policy.decode_actions(action) # Convert raw action to applicable policy
-            advantages = advantage_computation(rewards=rewards, values=values_list)
+            advantages, returns, rewards_tensor = advantage_computation(rewards=rewards, values=values_list, device=device)
+            
+            states_tensor = torch.stack(state_trajectory)
+            actions_tensor = torch.stack(actions_trajectory)
+            old_log_probs_tensor = torch.stack(old_log_probs)
+            
             agent.update(
-                states=state_trajectory,
-                actions=actions_trajectory,
-                old_log_probs=old_log_probs,
-                rewards=rewards,
+                states=states_tensor,
+                actions=actions_tensor,
+                old_log_probs=old_log_probs_tensor,
+                rewards=rewards_tensor,
                 advantages=advantages
             )  # Buffered items
             
