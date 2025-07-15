@@ -38,7 +38,8 @@ def train_loop(
     epochs=10, 
     device='cuda', 
     early_stopping=5,
-    lr=1e-3
+    lr=1e-3,
+    agent_update_frequency=3
     ):
     """
     models: dict with keys 'rl', 'random', 'none'
@@ -110,7 +111,7 @@ def train_loop(
                 if name == 'rl':
                     recent_train_loss.append(loss)
                 histories[name]['loss'].append(loss)
-            # break # for debugging
+            break # for debugging
 
         # Validation
         for name, model in models.items():
@@ -129,7 +130,7 @@ def train_loop(
                 patience[name] += 1
 
         # Train agent every soa dn so epochs
-        if agent and (epoch + 1) % 3 == 0:
+        if agent and (epoch + 1) % agent_update_frequency == 0:
             # Train for entire epoch with the same policy
             state = collect_state_information(
                 epoch=epoch,

@@ -3,3 +3,6 @@ __pycache__/
 
 # Ignore data file
 data/
+
+# Ignore debugging files. not needed
+debugy.py
