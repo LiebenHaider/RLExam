@@ -21,6 +21,7 @@ def main():
         METRICS_PATH = "src/data"
         METRICS_FILENAME = f"final_metrics_seednr_{seed}.csv"
         TESTMETRICS_FILENAME = f"final_testmetrics_seednr_{seed}.csv"
+        AGENTPOLICIES_FILENAME = f"agent_policies_seednr_{seed}.csv"
         os.makedirs(DATAPATH, exist_ok=True)
         
         # Get data, split data & create dataloaders
@@ -74,7 +75,7 @@ def main():
         }
         
         ### TRAINING LOOP ###
-        histories, best_scores, rewards = train_loop(
+        histories, best_scores, policy_trajectory = train_loop(
             model_dict, 
             dataloader_train=trainloader, 
             dataloader_val=valloader, 
@@ -94,18 +95,21 @@ def main():
         print("Testing finished. Saving data...")
         
         # Create folder and save data
-        final_metrics = {
+        agent_policies = {
             'best_scores': best_scores,
-            'reward_trajectory': rewards
+            'policy_trajectory': policy_trajectory
         }
         
+        agent_policies_df = pd.DataFrame.from_dict(agent_policies)
         final_metrics_df = pd.DataFrame.from_dict(histories)
         final_test_metrics_df = pd.DataFrame(final_test_metrics)
         os.makedirs(METRICS_PATH, exist_ok=True)
         metrics_path = os.path.join(METRICS_PATH, METRICS_FILENAME)
         testmetrics_path = os.path.join(METRICS_PATH, TESTMETRICS_FILENAME)
+        agentmetrics_path = os.path.join(METRICS_PATH, AGENTPOLICIES_FILENAME)
         final_metrics_df.to_csv(metrics_path)
         final_test_metrics_df.to_csv(testmetrics_path)
+        agent_policies_df.to_csv(agentmetrics_path)
         
         # Check if savings were successful
         if pd.read_csv(metrics_path).empty is False and pd.read_csv(testmetrics_path).empty is False:

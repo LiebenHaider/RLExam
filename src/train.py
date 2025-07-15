@@ -88,6 +88,9 @@ def train_loop(
     old_log_probs.append(log_prob.detach())
     values_list.append(value)
     aug_policy = policy.decode_actions(action) # Convert raw action to applicable policy
+    
+    # Trajectory of policy
+    policy_trajectory = []
 
     for epoch in range(epochs):
         
@@ -166,13 +169,15 @@ def train_loop(
             rewards.clear()
             values_list.clear()
             
-
+            # For inspection
+            policy_trajectory.append(aug_policy)
+            
         # Early stopping check
         if all(p >= early_stopping for p in patience.values()):
             print(f"Early stopping at epoch {epoch}")
             break
 
-    return histories, best_scores, rewards
+    return histories, best_scores, policy_trajectory
 
 def final_test(models, testloader, device='cuda'):
     best_final_scores = {}
