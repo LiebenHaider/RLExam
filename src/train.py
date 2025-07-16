@@ -37,7 +37,7 @@ def train_loop(
     agent, 
     epochs=10, 
     device='cuda', 
-    early_stopping=5,
+    early_stopping=12,
     lr=1e-3,
     agent_update_frequency=3
     ):
@@ -46,6 +46,8 @@ def train_loop(
     agent: RL agent
     """
     optimizers = {k: torch.optim.Adam(v.parameters(), lr=lr, weight_decay=1e-3) for k, v in models.items()}
+    schedulers = {k: torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1) 
+            for k, optimizer in optimizers.items()}
     histories = {k: defaultdict(list) for k in models.keys()}
     best_scores = {k: 0.0 for k in models.keys()}
     patience = {k: 0 for k in models.keys()}
@@ -111,8 +113,13 @@ def train_loop(
                 if name == 'rl':
                     recent_train_loss.append(loss)
                 histories[name]['loss'].append(loss)
-            break # for debugging
-
+            # break # for debugging
+            
+        # Step on scheduler
+        for scheduler in schedulers.values():
+            scheduler.step()
+            print(f"LR at epoch {epoch}: {scheduler.get_lr()}")
+            
         # Validation
         for name, model in models.items():
             acc = evaluate(model, dataloader_val, device)
@@ -154,7 +161,7 @@ def train_loop(
             states_tensor = torch.stack(state_trajectory)
             actions_tensor = torch.stack(actions_trajectory)
             old_log_probs_tensor = torch.stack(old_log_probs)
-            
+
             agent.update(
                 states=states_tensor,
                 actions=actions_tensor,

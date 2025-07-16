@@ -1,6 +1,9 @@
 import torch.nn as nn
 import torch.nn.functional as F
 
+"""
+Taken from https://github.com/NERSC/pytorch-examples/blob/main/models/resnet_cifar10.py
+"""
 
 class BasicBlock(nn.Module):
     expansion = 1

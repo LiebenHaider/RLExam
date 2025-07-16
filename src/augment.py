@@ -18,7 +18,6 @@ class AugmentationSpace:
         op_name = self.operations[op_idx]
         magnitude = (magnitude_idx + 1) / self.num_magnitudes  # scale 0-1
         
-        # Simplified implementation - you'd expand this
         transform_map = {
             'rotate': transforms.RandomRotation(degrees=magnitude * 30),  # 6-30 degrees
             'flip_h': transforms.RandomHorizontalFlip(p=magnitude),       # 0.2-1.0 probability  
