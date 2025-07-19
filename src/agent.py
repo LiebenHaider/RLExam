@@ -165,6 +165,7 @@ class PPOAgent(nn.Module):
             self.optimizer.step()
             
             print(f"Actor Loss: {actor_loss.item():.4f}, Critic Loss: {critic_loss.item():.4f}")
+            return actor_loss.item(), critic_loss.item()
     
 def collect_state_information(epoch, total_epochs, val_acc, train_loss, val_loss, lr, recent_train_loss, recent_val_accs, device='cuda'):
     if len(recent_train_loss) >= 5:

@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import numpy as np
 from collections import defaultdict
 from sklearn.metrics import f1_score, precision_score, recall_score
 from augment import apply_auto_augmentations, apply_random_augmentations
@@ -51,6 +52,7 @@ def train_loop(
     histories = {k: defaultdict(list) for k in models.keys()}
     best_scores = {k: 0.0 for k in models.keys()}
     patience = {k: 0 for k in models.keys()}
+    agent_hist = {'actor': np.array([]), 'critic': np.array([]), 'policy': np.array([])}
     
     policy = AutoAugmentPolicy() # Policy decoder
     aug_space = AugmentationSpace() # Augmentation space
@@ -93,7 +95,7 @@ def train_loop(
     aug_policy = policy.decode_actions(action) # Convert raw action to applicable policy
     
     # Trajectory of policy
-    policy_trajectory = []
+    agent_hist['policy']= np.append(agent_hist['policy'], aug_policy)
 
     for epoch in range(epochs):
         
@@ -157,18 +159,21 @@ def train_loop(
             values_list.append(value)
             aug_policy = policy.decode_actions(action) # Convert raw action to applicable policy
             advantages, returns, rewards_tensor = advantage_computation(rewards=rewards, values=values_list, device=device)
-            
+            print(f"Advantages: {advantages}, mean: {advantages.mean()}, std: {advantages.std()}")
             states_tensor = torch.stack(state_trajectory)
             actions_tensor = torch.stack(actions_trajectory)
             old_log_probs_tensor = torch.stack(old_log_probs)
 
-            agent.update(
+            actor_loss, critic_loss = agent.update(
                 states=states_tensor,
                 actions=actions_tensor,
                 old_log_probs=old_log_probs_tensor,
                 rewards=rewards_tensor,
                 advantages=advantages
             )  # Buffered items
+            
+            agent_hist['actor'] = np.append(agent_hist['actor'], actor_loss)
+            agent_hist['critic']= np.append(agent_hist['critic'], critic_loss)
             
             # Clear buffer
             state_trajectory.clear()
@@ -178,14 +183,15 @@ def train_loop(
             values_list.clear()
             
             # For inspection
-            policy_trajectory.append(aug_policy)
+            agent_hist['policy']= np.append(agent_hist['policy'], aug_policy)
             
         # Early stopping check
         if all(p >= early_stopping for p in patience.values()):
             print(f"Early stopping at epoch {epoch}")
             break
-
-    return histories, best_scores, policy_trajectory
+        
+        
+    return histories, best_scores, agent_hist
 
 def final_test(models, testloader, device='cuda'):
     best_final_scores = {}

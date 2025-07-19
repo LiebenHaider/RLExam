@@ -11,7 +11,7 @@ def get_dataloaders(data_path, batch_size=32, seed=42):
     train_len = int(0.9 * len(train_dataset))
     val_len = len(train_dataset) - train_len
 
-    g = torch.Generator().manual_seed(42)
+    g = torch.Generator().manual_seed(seed)
     train_data, val_data = random_split(train_dataset, [train_len, val_len], generator=g)
 
     trainloader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
