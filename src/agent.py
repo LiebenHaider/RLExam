@@ -93,7 +93,7 @@ class Actor_Critic(nn.Module):
         op_log_probs = op_dists.log_prob(op_actions)
         mag_log_probs = mag_dists.log_prob(mag_actions)
         prob_log_probs = prob_dists.log_prob(prob_actions)
-        
+
         return op_log_probs + mag_log_probs + prob_log_probs
 
 class AutoAugmentPolicy:
@@ -127,7 +127,7 @@ class AutoAugmentPolicy:
 
 # Updated PPO Agent
 class PPOAgent(nn.Module):
-    def __init__(self, state_dim, hidden_dim=128, lr=3e-4, clip_epsilon=0.2, epochs=4):
+    def __init__(self, state_dim, hidden_dim=128, lr=1e-3, clip_epsilon=0.2, epochs=4):
         super().__init__()
         self.actor_critic = Actor_Critic(state_dim, hidden_dim)
         self.optimizer = torch.optim.Adam(self.actor_critic.parameters(), lr=lr)
@@ -140,6 +140,8 @@ class PPOAgent(nn.Module):
         actions = torch.stack(actions) if not isinstance(actions, torch.Tensor) else actions
         old_log_probs = torch.stack(old_log_probs) if not isinstance(old_log_probs, torch.Tensor) else old_log_probs
         
+        rewards = rewards.repeat_interleave(states.shape[0])
+        
         for _ in range(self.epochs):
             # Get current policy predictions
             new_log_probs = self.actor_critic.compute_log_probs(states, actions)
@@ -147,7 +149,7 @@ class PPOAgent(nn.Module):
             
             # Calculate ratio for PPO clipping
             ratio = torch.exp(new_log_probs.sum(dim=1) - old_log_probs.sum(dim=1))
-            
+
             # PPO objective  
             surr1 = ratio * advantages
             surr2 = torch.clamp(ratio, 1 - self.clip_epsilon, 1 + self.clip_epsilon) * advantages
@@ -158,14 +160,13 @@ class PPOAgent(nn.Module):
             
             # Total loss
             total_loss = actor_loss + 0.5 * critic_loss
-            
+
             # Update
             self.optimizer.zero_grad()
             total_loss.backward()
             self.optimizer.step()
             
-            print(f"Actor Loss: {actor_loss.item():.4f}, Critic Loss: {critic_loss.item():.4f}")
-            return actor_loss.item(), critic_loss.item()
+        return actor_loss.item(), critic_loss.item()
     
 def collect_state_information(epoch, total_epochs, val_acc, train_loss, val_loss, lr, recent_train_loss, recent_val_accs, device='cuda'):
     if len(recent_train_loss) >= 5:

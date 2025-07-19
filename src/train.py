@@ -115,12 +115,12 @@ def train_loop(
                 if name == 'rl':
                     recent_train_loss.append(loss)
                 histories[name]['loss'].append(loss)
-            # break # for debugging
+            break # for debugging
             
         # Step on scheduler
         for scheduler in schedulers.values():
             scheduler.step()
-            print(f"LR at epoch {epoch}: {scheduler.get_lr()}")
+            # print(f"LR at epoch {epoch}: {scheduler.get_lr()}") # Debug
             
         # Validation
         for name, model in models.items():
@@ -159,7 +159,7 @@ def train_loop(
             values_list.append(value)
             aug_policy = policy.decode_actions(action) # Convert raw action to applicable policy
             advantages, returns, rewards_tensor = advantage_computation(rewards=rewards, values=values_list, device=device)
-            print(f"Advantages: {advantages}, mean: {advantages.mean()}, std: {advantages.std()}")
+
             states_tensor = torch.stack(state_trajectory)
             actions_tensor = torch.stack(actions_trajectory)
             old_log_probs_tensor = torch.stack(old_log_probs)
@@ -171,6 +171,8 @@ def train_loop(
                 rewards=rewards_tensor,
                 advantages=advantages
             )  # Buffered items
+            
+            print(f"{actor_loss}, {critic_loss}")
             
             agent_hist['actor'] = np.append(agent_hist['actor'], actor_loss)
             agent_hist['critic']= np.append(agent_hist['critic'], critic_loss)
