@@ -92,25 +92,25 @@ def main():
         
         print("Testing finished. Saving data...")
         
-        # agent_metrics_df = pd.DataFrame.from_dict(agent_hist, orient='index').T
-        # final_metrics_df = pd.DataFrame.from_dict(histories)
-        # final_test_metrics_df = pd.DataFrame(final_test_metrics)
-        # os.makedirs(METRICS_PATH, exist_ok=True)
-        # metrics_path = os.path.join(METRICS_PATH, METRICS_FILENAME)
-        # testmetrics_path = os.path.join(METRICS_PATH, TESTMETRICS_FILENAME)
-        # agentmetrics_path = os.path.join(METRICS_PATH, AGENTPOLICIES_FILENAME)
-        # final_metrics_df.to_csv(metrics_path)
-        # final_test_metrics_df.to_csv(testmetrics_path)
-        # agent_metrics_df.to_csv(agentmetrics_path)
+        agent_metrics_df = pd.DataFrame.from_dict(agent_hist, orient='index').T
+        final_metrics_df = pd.DataFrame.from_dict(histories)
+        final_test_metrics_df = pd.DataFrame(final_test_metrics)
+        os.makedirs(METRICS_PATH, exist_ok=True)
+        metrics_path = os.path.join(METRICS_PATH, METRICS_FILENAME)
+        testmetrics_path = os.path.join(METRICS_PATH, TESTMETRICS_FILENAME)
+        agentmetrics_path = os.path.join(METRICS_PATH, AGENTPOLICIES_FILENAME)
+        final_metrics_df.to_csv(metrics_path)
+        final_test_metrics_df.to_csv(testmetrics_path)
+        agent_metrics_df.to_csv(agentmetrics_path)
         
-        # # Check if savings were successful
-        # if (
-        #     pd.read_csv(metrics_path).empty is False or 
-        #     pd.read_csv(testmetrics_path).empty is False or 
-        #     pd.read_csv(agentmetrics_path).empty is False
-        # ):
+        # Check if savings were successful
+        if (
+            pd.read_csv(metrics_path).empty is False or 
+            pd.read_csv(testmetrics_path).empty is False or 
+            pd.read_csv(agentmetrics_path).empty is False
+        ):
             
-        #     print(f"Saving was successful. Data saved to {METRICS_PATH}.")
+            print(f"Saving was successful. Data saved to {METRICS_PATH}.")
     
 if __name__ == "__main__":
     main()

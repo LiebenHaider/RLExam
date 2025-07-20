@@ -149,7 +149,7 @@ class PPOAgent(nn.Module):
             
             # Calculate ratio for PPO clipping
             ratio = torch.exp(new_log_probs.sum(dim=1) - old_log_probs.sum(dim=1))
-
+            print(f"Ratio mean/std: {ratio.mean():.6f}/{ratio.std():.6f}")
             # PPO objective  
             surr1 = ratio * advantages
             surr2 = torch.clamp(ratio, 1 - self.clip_epsilon, 1 + self.clip_epsilon) * advantages
@@ -212,10 +212,10 @@ def advantage_computation(rewards, values, device, gamma=0.99):
     # Advantage = return - baseline (value estimate)
     advantages = returns - values
     
-    # Normalize advantages
-    if len(advantages) > 1:
-        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
-    else:
-        advantages = advantages - advantages.mean()
+    # # Normalize advantages
+    # if len(advantages) > 1:
+    #     advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+    # else:
+    #     advantages = advantages - advantages.mean()
     
     return advantages, returns, rewards

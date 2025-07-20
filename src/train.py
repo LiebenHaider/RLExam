@@ -115,7 +115,7 @@ def train_loop(
                 if name == 'rl':
                     recent_train_loss.append(loss)
                 histories[name]['loss'].append(loss)
-            break # for debugging
+            # break # for debugging
             
         # Step on scheduler
         for scheduler in schedulers.values():
@@ -172,8 +172,8 @@ def train_loop(
                 advantages=advantages
             )  # Buffered items
             
-            print(f"{actor_loss}, {critic_loss}")
-            
+            print(f"Actor loss: {actor_loss}, Critic loss: {critic_loss}")
+            print(f"Epoch {epoch}: advantages mean/std: {advantages.mean():.6f}/{advantages.std():.6f}")
             agent_hist['actor'] = np.append(agent_hist['actor'], actor_loss)
             agent_hist['critic']= np.append(agent_hist['critic'], critic_loss)
             
