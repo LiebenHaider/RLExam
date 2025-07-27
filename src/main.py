@@ -57,8 +57,8 @@ def main():
         
         # Create models to run in parallel and evaluate
         rl_resnet = ResNet18()      # model trained with rl
-        rand_resnet = ResNet18()    # model trained without rl
-        no_resnet = ResNet18()      # model trained without augmentation
+        # rand_resnet = ResNet18()    # model trained without rl
+        # no_resnet = ResNet18()      # model trained without augmentation
         
         # # Create agent
         agent = PPOAgent(
@@ -68,8 +68,8 @@ def main():
         
         model_dict = {
             'rl': rl_resnet.to(device),
-            'random': rand_resnet.to(device),
-            'none': no_resnet.to(device)
+            # 'random': rand_resnet.to(device),
+            # 'none': no_resnet.to(device)
         }
         
         ### TRAINING LOOP ###

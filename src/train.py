@@ -6,6 +6,7 @@ from sklearn.metrics import f1_score, precision_score, recall_score
 from augment import apply_auto_augmentations, apply_random_augmentations
 from agent import AutoAugmentPolicy, collect_state_information, advantage_computation
 from augment import AugmentationSpace
+from reward_function import entropy_term
 
 def train_step(model, optimizer, data, labels, device):
     model.train()
@@ -22,14 +23,16 @@ def train_step(model, optimizer, data, labels, device):
 def evaluate(model, dataloader, device):
     model.eval()
     correct, total = 0, 0
+    outputs_list = []
     with torch.no_grad():
         for data, labels in dataloader:
             data, labels = data.to(device), labels.to(device)
             outputs = model(data)
+            outputs_list.append(outputs)
             preds = outputs.argmax(dim=1)
             correct += (preds == labels).sum().item()
             total += labels.size(0)
-    return correct / total
+    return correct / total, torch.vstack(outputs_list)
 
 def train_loop(
     models, 
@@ -52,7 +55,7 @@ def train_loop(
     histories = {k: defaultdict(list) for k in models.keys()}
     best_scores = {k: 0.0 for k in models.keys()}
     patience = {k: 0 for k in models.keys()}
-    agent_hist = {'actor': np.array([]), 'critic': np.array([]), 'policy': np.array([])}
+    agent_hist = {'actor': np.array([]), 'critic': np.array([]), 'policy': np.array([]), 'reward': np.array([])}
     
     policy = AutoAugmentPolicy() # Policy decoder
     aug_space = AugmentationSpace() # Augmentation space
@@ -124,11 +127,12 @@ def train_loop(
             
         # Validation
         for name, model in models.items():
-            acc = evaluate(model, dataloader_val, device)
+            acc, pred_probs = evaluate(model, dataloader_val, device)
             if name == "rl": # Collect only rl agent's accuracy
                 recent_val_accs.append(acc)
-                if (epoch + 1) % 3 == 0: # Get FINAL reward
-                    rewards.append(acc)
+                if (epoch + 1) % agent_update_frequency == 0: # Get FINAL reward
+                    reward = acc + 0.2 * entropy_term(pred_probs)
+                    rewards.append(reward)
             histories[name]['val_acc'].append(acc)
 
             # Early stopping
@@ -175,7 +179,8 @@ def train_loop(
             print(f"Actor loss: {actor_loss}, Critic loss: {critic_loss}")
             print(f"Epoch {epoch}: advantages mean/std: {advantages.mean():.6f}/{advantages.std():.6f}")
             agent_hist['actor'] = np.append(agent_hist['actor'], actor_loss)
-            agent_hist['critic']= np.append(agent_hist['critic'], critic_loss)
+            agent_hist['critic'] = np.append(agent_hist['critic'], critic_loss)
+            agent_hist['reward'] = np.append(agent_hist['reward'], rewards)
             
             # Clear buffer
             state_trajectory.clear()

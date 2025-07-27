@@ -212,7 +212,7 @@ def advantage_computation(rewards, values, device, gamma=0.99):
     # Advantage = return - baseline (value estimate)
     advantages = returns - values
     
-    # # Normalize advantages
+    # # Normalize advantages # Removed because std dev caused problems
     # if len(advantages) > 1:
     #     advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
     # else:
