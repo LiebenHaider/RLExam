@@ -6,7 +6,7 @@ from sklearn.metrics import f1_score, precision_score, recall_score
 from augment import apply_auto_augmentations, apply_random_augmentations
 from agent import AutoAugmentPolicy, collect_state_information, advantage_computation
 from augment import AugmentationSpace
-from reward_function import entropy_term
+from reward_function import optimal_transport
 
 def train_step(model, optimizer, data, labels, device):
     model.train()
@@ -46,8 +46,34 @@ def train_loop(
     agent_update_frequency=3
     ):
     """
-    models: dict with keys 'rl', 'random', 'none'
-    agent: RL agent
+    Train Resnet models with different augmentation strategies in parallel.
+    
+    Parameters
+    ----------
+    models : dict
+        Dictionary with keys 'rl', 'random', 'none' containing ResNet models
+        for RL-based, random, and no augmentation respectively.
+    dataloader_train : torch.utils.data.DataLoader
+        Training data loader.
+    dataloader_val : torch.utils.data.DataLoader
+        Validation data loader.
+    agent : PPOAgent
+        RL agent that learns augmentation policies.
+    epochs : int, default=10
+        Maximum number of training epochs.
+    device : str, default='cuda'
+        Device for training ('cuda', 'cpu', 'mps').
+    early_stopping : int, default=12
+        Number of epochs without improvement before stopping.
+    lr : float, default=1e-3
+        Learning rate for ResNet optimizers.
+    agent_update_frequency : int, default=3
+        Update agent policy every N epochs.
+    
+    Returns
+    -------
+    dict
+        Training history for all models including losses and accuracies.
     """
     optimizers = {k: torch.optim.Adam(v.parameters(), lr=lr, weight_decay=1e-3) for k, v in models.items()}
     schedulers = {k: torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1) 
@@ -131,7 +157,7 @@ def train_loop(
             if name == "rl": # Collect only rl agent's accuracy
                 recent_val_accs.append(acc)
                 if (epoch + 1) % agent_update_frequency == 0: # Get FINAL reward
-                    reward = acc + 0.2 * entropy_term(pred_probs)
+                    reward = acc + 0.2 * optimal_transport(pred_probs)
                     rewards.append(reward)
             histories[name]['val_acc'].append(acc)
 

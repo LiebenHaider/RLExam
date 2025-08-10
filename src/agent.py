@@ -15,6 +15,9 @@ import numpy as np
 from torch.distributions import Categorical
 
 class Actor_Critic(nn.Module):
+    """
+    Actor-Critic Neural Network class
+    """
     def __init__(self, state_dim, hidden_dim=128):
         super().__init__()
         self.num_sub_policies = 3 # Need that, mismatch before
@@ -97,6 +100,9 @@ class Actor_Critic(nn.Module):
         return op_log_probs + mag_log_probs + prob_log_probs
 
 class AutoAugmentPolicy:
+    """
+    Class for decoding actions into augmentation policy
+    """
     def __init__(self, num_sub_policies=3, ops_per_sub_policy=2):
         self.num_sub_policies = num_sub_policies
         self.ops_per_sub_policy = ops_per_sub_policy
@@ -127,6 +133,29 @@ class AutoAugmentPolicy:
 
 # Updated PPO Agent
 class PPOAgent(nn.Module):
+    """
+    Proximal Policy Optimization (PPO) agent for learning augmentation policies.
+    
+    Parameters
+    ----------
+    state_dim : int
+        Dimensionality of the state vector
+    hidden_dim : int
+        Number of hidden units in fc
+    lr : float
+        Learning rate for the PPO agent
+    clip_epsilon : float
+        Clipping in case update is too large
+    
+    Attributes
+    ----------
+    actor : nn.Module
+        Policy network
+    critic : nn.Module
+        Value network that estimates state values for advantage computation.
+    optimizer : torch.optim.Optimizer
+        adam optimizer for update
+    """
     def __init__(self, state_dim, hidden_dim=128, lr=1e-3, clip_epsilon=0.2, epochs=4):
         super().__init__()
         self.actor_critic = Actor_Critic(state_dim, hidden_dim)
@@ -192,7 +221,7 @@ def collect_state_information(epoch, total_epochs, val_acc, train_loss, val_loss
 
 def advantage_computation(rewards, values, device, gamma=0.99):
     """
-    From our exercise implementation (simplified)
+    From our exercise implementation (simplified). Computes unnormalized advantages.
     """
     rewards = rewards[-len(values):] # Fix shape mismatch in ppo update
     rewards = torch.tensor(rewards, dtype=torch.float32, device=device)
@@ -212,6 +241,7 @@ def advantage_computation(rewards, values, device, gamma=0.99):
     # Advantage = return - baseline (value estimate)
     advantages = returns - values
     
+    #### DEPRECATED #####
     # # Normalize advantages # Removed because std dev caused problems
     # if len(advantages) > 1:
     #     advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
