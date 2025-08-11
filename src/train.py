@@ -212,7 +212,11 @@ def train_loop(
             values_list.append(value)
             aug_policy = policy.decode_actions(action)
             agent_hist['policy'] = np.append(agent_hist['policy'], aug_policy)
-        
+            
+        # Early stopping check
+        if all(p >= early_stopping for p in patience.values()):
+            print(f"Early stopping at epoch {epoch}")
+            break
         
     return histories, best_scores, agent_hist
 
