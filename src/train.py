@@ -157,7 +157,7 @@ def train_loop(
             if name == "rl": # Collect only rl agent's accuracy
                 recent_val_accs.append(acc)
                 if (epoch + 1) % agent_update_frequency == 0: # Get FINAL reward
-                    reward = acc + 0.2 * optimal_transport(pred_probs)
+                    reward = acc
                     rewards.append(reward)
             histories[name]['val_acc'].append(acc)
 
@@ -168,60 +168,50 @@ def train_loop(
             else:
                 patience[name] += 1
 
-        # Train agent every soa dn so epochs
+        # Train agent every so and so epochs
         if agent and (epoch + 1) % agent_update_frequency == 0:
-            # Train for entire epoch with the same policy
+            
+            # STEP 1: Update agent
+            if len(state_trajectory) > 0 and len(rewards) > 0:
+                advantages, returns, rewards_tensor = advantage_computation(rewards=rewards, values=values_list, device=device)
+                states_tensor = torch.stack(state_trajectory)
+                actions_tensor = torch.stack(actions_trajectory)
+                old_log_probs_tensor = torch.stack(old_log_probs)
+                
+                actor_loss, critic_loss = agent.update(
+                    states=states_tensor,
+                    actions=actions_tensor,
+                    old_log_probs=old_log_probs_tensor,
+                    rewards=rewards_tensor,
+                    advantages=advantages
+                )
+                
+                print(f"Actor loss: {actor_loss}, Critic loss: {critic_loss}")
+                agent_hist['actor'] = np.append(agent_hist['actor'], actor_loss)
+                agent_hist['critic'] = np.append(agent_hist['critic'], critic_loss)
+                agent_hist['reward'] = np.append(agent_hist['reward'], rewards[-1])
+                
+                # Clear buffers after update
+                state_trajectory.clear()
+                actions_trajectory.clear()
+                old_log_probs.clear()
+                rewards.clear()
+                values_list.clear()
+            
+            # STEP 2: New policy
             state = collect_state_information(
-                epoch=epoch,
-                lr=lr,
-                total_epochs=epochs,
-                val_acc=val_acc,
-                train_loss=train_loss,
-                val_loss=val_loss,
-                recent_train_loss=recent_train_loss,
-                recent_val_accs=recent_val_accs,
+                epoch=epoch, lr=lr, total_epochs=epochs, val_acc=val_acc,
+                train_loss=train_loss, val_loss=val_loss,
+                recent_train_loss=recent_train_loss, recent_val_accs=recent_val_accs,
                 device=device
             )
             state_trajectory.append(state)
-            action, log_prob, value = agent.actor_critic.get_action(state) # Get actions given current state
+            action, log_prob, value = agent.actor_critic.get_action(state)
             actions_trajectory.append(action)
-            old_log_probs.append(log_prob.detach()) # Remove from CG or else silent bug
+            old_log_probs.append(log_prob.detach())
             values_list.append(value)
-            aug_policy = policy.decode_actions(action) # Convert raw action to applicable policy
-            advantages, returns, rewards_tensor = advantage_computation(rewards=rewards, values=values_list, device=device)
-
-            states_tensor = torch.stack(state_trajectory)
-            actions_tensor = torch.stack(actions_trajectory)
-            old_log_probs_tensor = torch.stack(old_log_probs)
-
-            actor_loss, critic_loss = agent.update(
-                states=states_tensor,
-                actions=actions_tensor,
-                old_log_probs=old_log_probs_tensor,
-                rewards=rewards_tensor,
-                advantages=advantages
-            )  # Buffered items
-            
-            print(f"Actor loss: {actor_loss}, Critic loss: {critic_loss}")
-            print(f"Epoch {epoch}: advantages mean/std: {advantages.mean():.6f}/{advantages.std():.6f}")
-            agent_hist['actor'] = np.append(agent_hist['actor'], actor_loss)
-            agent_hist['critic'] = np.append(agent_hist['critic'], critic_loss)
-            agent_hist['reward'] = np.append(agent_hist['reward'], rewards)
-            
-            # Clear buffer
-            state_trajectory.clear()
-            actions_trajectory.clear()
-            old_log_probs.clear()
-            rewards.clear()
-            values_list.clear()
-            
-            # For inspection
-            agent_hist['policy']= np.append(agent_hist['policy'], aug_policy)
-            
-        # Early stopping check
-        if all(p >= early_stopping for p in patience.values()):
-            print(f"Early stopping at epoch {epoch}")
-            break
+            aug_policy = policy.decode_actions(action)
+            agent_hist['policy'] = np.append(agent_hist['policy'], aug_policy)
         
         
     return histories, best_scores, agent_hist
